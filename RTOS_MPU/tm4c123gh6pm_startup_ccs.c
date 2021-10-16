@@ -23,35 +23,194 @@
 //*****************************************************************************
 
 #include <stdint.h>
-
+#include "uart0.h"
+#include "helperfunctions.h"
 //*****************************************************************************
 //
 // Forward declaration of the default fault handlers.
 //
 //*****************************************************************************
+
+
 void ResetISR(void);
 static void NmiSR(void);
 static void HardFaultISR(void);
 static void IntDefaultHandler(void);
 
+
+
+extern uint32_t * getPSP(void); //process stack pointer
+extern uint32_t * getMSP(void); //main stack pointer value
+extern uint32_t * getHardFaultFlags(void); //pg. 183 of datasheet
+
 //RTOS Fall 2021 PROJECT ADDONS
+
+//*****************************REGISTER DEFINITIONS
+//memory management mpu stuff
+#define FAULTSTAT_REG       0xE000ED28U //contains MFAULTSTAT, BFAULTSTAT, UFAULTSTAT
+#define MEM_MGNT_REG        0xE000ED34U //true faulting address
+#define BUS_FAULT_REG       0xE000ED38U //true faulting address
+//hardfault
+#define HARD_FAULT_STAT_REG 0xE000ED2CU
+
+//exceptions priority and pending stuff.
+#define INTCTRL_REG         0xE000ED04U //will be used to change pendSV status to pending which will cause the exception to be called.
+#define SYS_HANDLER_CTRL    0xE000ED24U //pg 173. controls context switching, pending exceptions, etc.
+
+//*****************************SETTING BITS DEFINITIONS
+
+#define PENDSV                  (1 << 28) //pg. 160 INTCLR_REG, will cause a PENDSV exception
+#define UNPEND_SV               (1 << 27) //INTCLR_REG, will clear a PENDSV exception
+#define MEM_MGNT_FAULT_CLEAR    (1 << 13) //SYS_HANDLER_CTR, will clear an MPU fault
+
+//will be used later in place of PID #?
+#define VECPEND_MASK            0x000FF000 //INTCLR_REG, contains exceptions number of the highest priority pending enabled exception
+
+
+uint8_t pid = 1;
 static void BusFaultISR()
 {
-
+    putsUart0("Bus Fault in process ");
+    putcUart0( (pid+'0') );
 };
 static void UsageFaultISR()
 {
-
+    putsUart0("Usage Fault in process ");
+    putcUart0( (pid+'0') );
 };
+
 //static void HardFaultISR(uint32_t pid){};
 static void MPUFaultISR()
 {
+    putsUart0("MPU Fault in process ");
+    putcUart0( (pid+'0') );
+    putsUart0("\r\n");
+    uint32_t * psp_pointer = getPSP(); //points to top of stack === R0;
+    uint32_t * msp_pointer = getMSP();
+    putsUart0("PSP: ");
+    printHex(*psp_pointer);
+    putsUart0("MSP: ");
+    printHex(*msp_pointer);
+
+    //access mem fault register. byte access, instead of word access. (note to self: change this to uint32_t if it does not work with byte access.)
+
+    volatile uint8_t * ptr_memfault = (uint8_t *)(FAULTSTAT_REG); //page.177 for memfault register
+
+    putsUart0("MemFault(pg.177): ");
+    printHex(*ptr_memfault);
+
+
+    putsUart0("R0: ");
+    printHex(*psp_pointer);
+
+    putsUart0("R1: ");
+    printHex(*(psp_pointer+1));
+
+    putsUart0("R2: ");
+    printHex(*(psp_pointer+2));
+
+    putsUart0("R3: ");
+    printHex(*(psp_pointer+3));
+
+    putsUart0("R12: ");
+    printHex(*(psp_pointer+4));
+
+    putsUart0("LR: ");
+    printHex(*(psp_pointer+5));
+
+    putsUart0("PC: ");
+    printHex(*(psp_pointer+6));
+
+    putsUart0("xPSR: ");
+    printHex(*(psp_pointer+7));
+
+    volatile uint32_t * MemMgmntFaultAddr = (uint32_t *)(MEM_MGNT_REG); //pg 177.
+    volatile uint32_t * BusFaultAddr = (uint32_t * )(BUS_FAULT_REG);
+
+    putsUart0("\r\nData Address: ");
+    printHex(*MemMgmntFaultAddr); //print true faulting data adddress
+    putsUart0("Instruction Address: ");
+    printHex(*BusFaultAddr); //print true faulting instruction address
+    putsUart0("\r\n");
+
+    //clear mpu fault pending bit and trigger a pendsv isr
+
+    //clear mpu fault pending bit
+    volatile uint32_t * ptr_MPUCLEAR = (uint32_t * )(SYS_HANDLER_CTRL); //pg 172
+    *ptr_MPUCLEAR &= ~(MEM_MGNT_FAULT_CLEAR); //should clear MPU pending bits
+
+    //trigger pendSV
+    volatile uint32_t *pend_sv_ptr = (uint32_t *)(INTCTRL_REG);
+    *pend_sv_ptr |= PENDSV; //this will set the bit to pending. will then cause a pendSV exception.
+
 
 };
 static void PendSVISR()
 {
 
-};
+    putsUart0("pendSV in process ");
+    putcUart0( (pid+'0') );
+    putsUart0("\r\n\n");
+
+    //check pg. 177 for DERR and IERR
+    //if DERR and IERR is set print out called from MPU
+    volatile uint32_t * fault_reg_ptr = (uint32_t * )(FAULTSTAT_REG);
+
+    if( (*fault_reg_ptr & (0x2) ))// ox3 because DERR and IERR are first two bits.
+    {
+        putsUart0("Called from MPU, Data access violation\r\n");
+    }
+
+    else if( (*fault_reg_ptr & (0x1) ))// ox3 because DERR and IERR are first two bits.
+    {
+        putsUart0("Called from MPU, Instruction access violation\r\n");
+    }
+
+    //user INTCTRL register to trigger an pendSVisr call.
+    putsUart0("stuck in pendSV loop\r\n");
+    while(1);
+
+}
+
+static void
+HardFaultISR(void)
+{
+    /* provide the value of the PSP, MSP, and hard fault
+    flags (in hex)     */
+
+    putsUart0("Hard Fault in process ");
+    putcUart0( (pid+'0') );
+    putsUart0("\r\n");
+
+    volatile uint32_t * psp_pointer = getPSP();
+    volatile uint32_t * msp_pointer = getMSP();
+    putsUart0("PSP: ");
+    printHex(*psp_pointer);
+    putsUart0("MSP: ");
+    printHex(*msp_pointer);
+
+    volatile uint32_t * ptr_hardfault = (uint32_t *)(HARD_FAULT_STAT_REG); //page.183 for hardfault register
+
+    putsUart0("HardFault Flags: ");
+    printHex(*ptr_hardfault);
+
+    putsUart0("\r\n Stuck in HardFault loop \r\n");
+    while(1)
+    {
+    }
+}
+
+static void
+IntDefaultHandler(void)
+{
+    //
+    // Go into an infinite loop.
+    //
+    putsUart0("Default handler");
+    while(1)
+    {
+    }
+}
 
 //*****************************************************************************
 //
@@ -90,9 +249,9 @@ void (* const g_pfnVectors[])(void) =
     ResetISR,                               // The reset handler
     NmiSR,                                  // The NMI handler
     HardFaultISR,                               // The hard fault handler
-    MPUFaultISR,                      // The MPU fault handler
-    BusFaultISR,                      // The bus fault handler
-    UsageFaultISR,                      // The usage fault handler
+    MPUFaultISR,                            // The MPU fault handler
+    BusFaultISR,                             // The bus fault handler
+    UsageFaultISR,                            // The usage fault handler
     0,                                      // Reserved
     0,                                      // Reserved
     0,                                      // Reserved
@@ -289,16 +448,8 @@ NmiSR(void) //non-maskable interrupt
 // for examination by a debugger.
 //
 //*****************************************************************************
-static void
-HardFaultISR(void)
-{
-    //
-    // Enter an infinite loop.
-    //
-    while(1)
-    {
-    }
-}
+
+//<copy pasta on top>
 
 //*****************************************************************************
 //
@@ -307,13 +458,5 @@ HardFaultISR(void)
 // for examination by a debugger.
 //
 //*****************************************************************************
-static void
-IntDefaultHandler(void)
-{
-    //
-    // Go into an infinite loop.
-    //
-    while(1)
-    {
-    }
-}
+
+// <copy pasta on top>

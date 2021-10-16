@@ -29,18 +29,59 @@ void binarySend(uint32_t value)
 
 }
 
-int str_cmp(const char * string1, const char *string2)
+int str_cmp(const char * str1, const char *str2)
 {
-    int c1, res;
+    int character, result;
 
    for (;;)
    {
-       c1  = (unsigned char)*string1++;
-       res = c1 - (unsigned char)*string2++;
+       character  = (unsigned char)*str1++;
+       result = character - (unsigned char)*str2++;
 
-       if (c1 == 0 || res != 0) break;
+       if (character == 0 || result != 0) break;
    }
 
-   return res;
+   return result;
 }
 
+
+void printHex(uint32_t value) //should be optimized to remove the modulus operation
+{
+    uint8_t remainder;
+    int8_t i;
+    char hexOut[64];
+    uint32_t counter = 0;
+
+    while(value != 0)
+    {
+        remainder =  value%16;
+        if(remainder <= 9)
+        {
+            remainder += '0'; //convert to char
+        }
+
+        else if( remainder > 9 )
+        {
+            remainder += 'A' - 10; //minus 10 because this is after 10 ASCII values have passed
+        }
+
+        value /=16;
+        hexOut[counter] = remainder;
+        counter++;
+    }
+
+    hexOut[counter+1] = '\0'; //terminate end of char array
+
+    putsUart0("0x");
+    for(i=counter-1; i>=0; i--)
+    {
+        putcUart0(hexOut[i]);
+    }
+
+    if(counter == 0)
+    {
+        putsUart0("0");
+    }
+    putsUart0("\r\n"); //new line after printing all lines
+
+}

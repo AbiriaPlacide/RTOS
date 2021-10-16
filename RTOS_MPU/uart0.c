@@ -77,7 +77,7 @@ void putcUart0(char c)
 {
     while (UART0_FR_R & UART_FR_TXFF);               // wait if uart0 tx fifo full
     UART0_DR_R = c;                                  // write character to fifo
-}
+    }
 
 // Blocking function that writes a string when the UART buffer is not full
 void putsUart0(char* str)

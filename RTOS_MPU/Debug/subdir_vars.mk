@@ -7,7 +7,7 @@ CMD_SRCS += \
 ../tm4c123gh6pm.cmd 
 
 S_SRCS += \
-../setPSP.s 
+../fault_main.s 
 
 C_SRCS += \
 ../clock.c \
@@ -20,7 +20,7 @@ C_SRCS += \
 ../uart0.c 
 
 S_DEPS += \
-./setPSP.d 
+./fault_main.d 
 
 C_DEPS += \
 ./clock.d \
@@ -34,10 +34,10 @@ C_DEPS += \
 
 OBJS += \
 ./clock.obj \
+./fault_main.obj \
 ./gpio.obj \
 ./helperfunctions.obj \
 ./main.obj \
-./setPSP.obj \
 ./shell_API.obj \
 ./syscalls.obj \
 ./tm4c123gh6pm_startup_ccs.obj \
@@ -45,10 +45,10 @@ OBJS += \
 
 OBJS__QUOTED += \
 "clock.obj" \
+"fault_main.obj" \
 "gpio.obj" \
 "helperfunctions.obj" \
 "main.obj" \
-"setPSP.obj" \
 "shell_API.obj" \
 "syscalls.obj" \
 "tm4c123gh6pm_startup_ccs.obj" \
@@ -65,7 +65,7 @@ C_DEPS__QUOTED += \
 "uart0.d" 
 
 S_DEPS__QUOTED += \
-"setPSP.d" 
+"fault_main.d" 
 
 C_SRCS__QUOTED += \
 "../clock.c" \
@@ -78,6 +78,6 @@ C_SRCS__QUOTED += \
 "../uart0.c" 
 
 S_SRCS__QUOTED += \
-"../setPSP.s" 
+"../fault_main.s" 
 
 

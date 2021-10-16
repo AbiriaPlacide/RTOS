@@ -9,10 +9,10 @@ GEN_CMDS__FLAG :=
 
 ORDERED_OBJS += \
 "./clock.obj" \
+"./fault_main.obj" \
 "./gpio.obj" \
 "./helperfunctions.obj" \
 "./main.obj" \
-"./setPSP.obj" \
 "./shell_API.obj" \
 "./syscalls.obj" \
 "./tm4c123gh6pm_startup_ccs.obj" \
@@ -146,7 +146,7 @@ all: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 RTOS_MPU.out: $(OBJS) $(CMD_SRCS) $(GEN_CMDS)
 	@echo 'Building target: "$@"'
 	@echo 'Invoking: Arm Linker'
-	"/home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/bin/armcl" -mv7M4 --code_state=16 --float_support=FPv4SPD16 -me --define=ccs="ccs" --define=PART_TM4C123GH6PM -g --gcc --diag_warning=225 --diag_wrap=off --display_error_number --abi=eabi -z -m"RTOS_MPU.map" --heap_size=0 --stack_size=512 -i"/home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/lib" -i"/home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="RTOS_MPU_linkInfo.xml" --rom_model -o "RTOS_MPU.out" $(ORDERED_OBJS)
+	"/home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/bin/armcl" -mv7M4 --code_state=16 --float_support=FPv4SPD16 -me --define=ccs="ccs" --define=PART_TM4C123GH6PM -g --gcc --diag_warning=225 --diag_wrap=off --display_error_number --abi=eabi -z -m"RTOS_MPU.map" --heap_size=0 --stack_size=1024 -i"/home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/lib" -i"/home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include" --reread_libs --diag_wrap=off --display_error_number --warn_sections --xml_link_info="RTOS_MPU_linkInfo.xml" --rom_model -o "RTOS_MPU.out" $(ORDERED_OBJS)
 	@echo 'Finished building target: "$@"'
 	@echo ' '
 
@@ -160,9 +160,9 @@ RTOS_MPU.hex: $(EXE_OUTPUTS)
 # Other Targets
 clean:
 	-$(RM) $(BIN_OUTPUTS__QUOTED)$(EXE_OUTPUTS__QUOTED)
-	-$(RM) "clock.obj" "gpio.obj" "helperfunctions.obj" "main.obj" "setPSP.obj" "shell_API.obj" "syscalls.obj" "tm4c123gh6pm_startup_ccs.obj" "uart0.obj" 
+	-$(RM) "clock.obj" "fault_main.obj" "gpio.obj" "helperfunctions.obj" "main.obj" "shell_API.obj" "syscalls.obj" "tm4c123gh6pm_startup_ccs.obj" "uart0.obj" 
 	-$(RM) "clock.d" "gpio.d" "helperfunctions.d" "main.d" "shell_API.d" "syscalls.d" "tm4c123gh6pm_startup_ccs.d" "uart0.d" 
-	-$(RM) "setPSP.d" 
+	-$(RM) "fault_main.d" 
 	-@echo 'Finished clean'
 	-@echo ' '
 

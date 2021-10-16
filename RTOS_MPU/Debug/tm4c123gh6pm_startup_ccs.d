@@ -11,6 +11,12 @@ tm4c123gh6pm_startup_ccs.obj: /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-ar
 tm4c123gh6pm_startup_ccs.obj: /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/machine/_types.h
 tm4c123gh6pm_startup_ccs.obj: /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/machine/_stdint.h
 tm4c123gh6pm_startup_ccs.obj: /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/sys/_stdint.h
+tm4c123gh6pm_startup_ccs.obj: ../uart0.h
+tm4c123gh6pm_startup_ccs.obj: ../helperfunctions.h
+tm4c123gh6pm_startup_ccs.obj: ../gpio.h
+tm4c123gh6pm_startup_ccs.obj: ../tm4c123gh6pm.h
+tm4c123gh6pm_startup_ccs.obj: ../helperfunctions.h
+tm4c123gh6pm_startup_ccs.obj: /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/stdbool.h
 
 ../tm4c123gh6pm_startup_ccs.c: 
 /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/stdint.h: 
@@ -23,3 +29,9 @@ tm4c123gh6pm_startup_ccs.obj: /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-ar
 /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/machine/_types.h: 
 /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/machine/_stdint.h: 
 /home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/sys/_stdint.h: 
+../uart0.h: 
+../helperfunctions.h: 
+../gpio.h: 
+../tm4c123gh6pm.h: 
+../helperfunctions.h: 
+/home/abiria/ccstudio/ccs/tools/compiler/ti-cgt-arm_20.2.4.LTS/include/stdbool.h: 
