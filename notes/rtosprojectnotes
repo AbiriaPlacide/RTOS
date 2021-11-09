@@ -1,0 +1,226 @@
+step3)
+stack allocated must be pointed at the top
+SRD bit- sub-region disable
+starting address + size of stack
+learn how to calculate srd'
+
+step3 check
+
+print SRD's
+	print starting and ending values of stack
+
+	right now: it only implements round-robin
+
+step 4: startRTOS()
+
+	*only idle created
+	taskCurrent = rtosScheduler(); //returns a number between [0,max_tasks]
+	index into tcb[]
+	setPsP ([tcb[], sp)
+	set ASP bit
+	fn = tcb[], pid=(address of stack pointer?)
+	fun();
+
+step5:
+	yield()
+
+	__(inline assembly)
+
+	"SVC #___" for now just put a number in there
+
+	will call SVCIsr(void)
+	{
+				user											Kernel
+											|		
+		(startRTOS) -> (idle) -> (yield) -> |(svcISR) -> PendSVIsr()
+	}										|
+											|
+											|
+yield()
+{
+	__asm__ svc #___
+
+}
+
+step 6)a coding pendSVIsr (written on assembly)
+	only idle is running
+	Inside of svcISR, set pendsv bit 28
+	task switch happens inside PendSV isr only****
+
+	when pendsvISR is called,  all registers and flags for idle are saved.
+	so...push with software, PUSH R4-11, since its not automatically saved.
+	Hardware pushes R0-R3, R12, SP, LR, PC, XPSR
+	pendSVIsR on PsP()
+
+
+	functions
+	---------------------
+		PUSHR4-11 -> PSP
+
+		PSP<- POP R4-11 
+
+	example push
+	-------------------
+		mrs r0, psp
+		sub r0, r0, #4
+		STR R11, [R0]
+
+		....and at the end...
+		msr psp, [R0]
+	--------------------
+
+	example pop
+	-------------------
+		mrs r0, psp
+		LDR R11, [R0]
+		add r0, r0, #4
+		LDR R10, [R]
+
+		....and the end...
+		msr psp, R0
+	--------------------
+
+	step 6b
+	--------------------
+
+	save the psp in the tcb
+	tcb[taskcurrent].sp <- psp
+	task_current = getSchedule() <- still idle
+	
+	push and pop functions are manual
+	*push and pop instruction push to the main stack pointer which is not what we want
+	psp <-[taskcurrent] 
+
+	step 7)
+
+	program called idle, idle2(add by me also different LED)
+
+	in start RTOS, mark the task as READY. 
+
+	hardware pushes (xPSR -> R)
+	the rest of work is done in pendSVISR()
+	{
+		push r4- 11
+
+		save psp
+
+		call scheduler
+
+		if(ready)
+		{
+			restore psp
+			pop r4->R11
+	    }
+
+		else  //unrun
+		{
+			//mark as ready
+			setpsp(tcb.spInit)//you have to add a stack 
+			push xPSR -> R0 on stack //emulates what hardware would have pushed pushPSP(register)
+							push values R12, R3-R0 (8 pushes) (should be a function that's called 8 times
+			set Link Register to valid value 0xFFFFFFF(__), table 2-10
+			use 0xFFFF.FFFD in Link register,  EXEC_RETURN, should match H/w pop list.
+	    }
+
+		SRD stuff-------
+		starting address - stack size gives you starting bit.
+		stacksize/1024 will give you srd
+
+		hardware pops R0-> xPSR automatically
+
+	}
+
+	step 8
+	---------------------------------------------------------------------------------------------------
+	add support for sleep & sysTick ISR
+
+	in svc isr()
+		extract the svc number (n)
+			switch (n)
+				case(yield)
+					set pendsv 
+					break
+				case sleep:
+					record timeout
+						state <- DELAY
+						set pendsv bit
+						break
+
+	systick isr() runs at 1 khz rate: will be used for maintaining sleep timers and for switching tasks preemptively.
+		for all tasks in tcb that are valid, we get timeout from the tcb
+				if(sleep)
+				{
+					timeout--
+				if(timeout == 0)
+						STATE == READY
+				}
+
+	extracting svc number
+	---------------------------------------------------------------------------------------------------
+
+	svc # n is a 16 bit instruction
+
+	wheen svc isr is called from sleep(timeout), r0 contains the argument on the stack
+	program counter contains the svc number at PC-2. derefence PC-2 as an 8 bit register to get SVC (n)
+	cast program counter as a uint8_t addr subtract 2.
+
+		write functions getR0frompsp()
+						getSVCno();
+	At this point we should be able to run idle/lengthy/Flash4Hz
+
+
+	step 9 wait (idle/lengthy/flash4hz/oneshot
+	---------------------------------------------------------------------------------------------------
+
+	wait(semaphore index)
+	{
+		svc #____
+
+	}
+
+	in SVCISR()
+		add new case 
+
+		case wait:
+			i = get index from R0
+
+			if semaphore i count > 0: (means that its available)
+				count--
+			else
+				add process to semaphore i queue, inc queue count
+				record semaphore i in tcb
+				set state <- locked
+				set pendSV
+			break
+step 9) Post
+
+
+Post(semaphore index)
+	post ( )
+		svc #
+
+svcIsr
+	new case Post:
+		increment semaphore count
+
+		look into queue
+			if(queue.size > 0)
+			{
+				make next task in list ready
+				delete task from queue, count--
+					decrement semaphore count
+					decrement queue.size
+			}
+
+step 10) Priority scheduler: what do you run next
+
+0 is highest <-> 7 is lowest
+there is a next pointer/index(0-11) in the tcb for each priority
+
+* look counter starts at 0;
+
+1) start at level 0 (i=0), find next ready unrun task at level i (maintain next index [i] % 12
+2) if none at level i (looked at 12 places), then  increment lookover counter, inc next[i] % 12 
+	if(lookover == 12) i++
+3) if found, exit loop, leave all next_index[i] as is
+	**next index is a **global variable
