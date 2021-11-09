@@ -1,6 +1,7 @@
 #Real-time Operating Systems Course
 #Project steps
 1. Shell Interface over UART
+<<<<<<< HEAD
 2. Memory Protection Unit 
 3. RTOS Design
 	1) initHW() and ReadPushButtons() functions
@@ -11,3 +12,8 @@
 	6) implement pendSVisr to save context of task when switching between tasks. (switching between 1 task for now)
 			*(push/pop reg 4-11, since they are not saved by hardware)
 	7) implement pendSVisr to switch between multiple tasks (in progress...)
+=======
+2. Memory Protection Unit
+3. Interfaces: Push Buttons, Leds (in progress...)
+
+
