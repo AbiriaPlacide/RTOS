@@ -17,6 +17,7 @@ rtos.obj: ../tm4c123gh6pm.h
 rtos.obj: ../helperfunctions.h
 rtos.obj: ../gpio.h
 rtos.obj: ../helperfunctions.h
+rtos.obj: ../shell_API.h
 rtos.obj: ../syscalls.h
 rtos.obj: ../clock.h
 rtos.obj: ../uart0.h
@@ -40,6 +41,7 @@ rtos.obj: ../systick.h
 ../helperfunctions.h: 
 ../gpio.h: 
 ../helperfunctions.h: 
+../shell_API.h: 
 ../syscalls.h: 
 ../clock.h: 
 ../uart0.h: 

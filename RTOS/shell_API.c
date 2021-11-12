@@ -106,9 +106,9 @@ void getsUart0(USER_DATA * data)
             data->buffer[count] = c;
             count++;
         }
-
-        //loop back
+        yield();
     }
+
 }
 
 //parse fields

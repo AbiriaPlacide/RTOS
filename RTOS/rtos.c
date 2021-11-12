@@ -1,7 +1,7 @@
 // RTOS Framework - Fall 2021
 // J Losh
 
-// Student Name: Abiria Placide
+// Student Name:
 // TO DO: Add your name on this line.  Do not include your ID number in the file.
 
 // Please do not change any function name in this code or the thread priorities
@@ -47,6 +47,7 @@
 #include <string.h>
 #include "tm4c123gh6pm.h"
 #include "helperfunctions.h"
+#include "shell_API.h"
 #include "syscalls.h"
 #include "clock.h"
 #include "gpio.h"
@@ -81,7 +82,7 @@
 uint32_t * heap = (uint32_t *)(0x20001800); //6KiB for OS
 
 
-//custom prototypes
+//custom prototypes & defines
 void strcpyChar(char * dest, const char * src);
 uint32_t calculateSRD(uint32_t StackSize);
 void setPendSV();
@@ -96,14 +97,16 @@ extern void pushPSP(uint32_t value);
 extern uint32_t * getR0PSP();
 extern uint32_t * getProgramCounter();
 
-enum services{YIELD=1, SLEEP=2, WAIT=3};
-
+//custom globals
+enum services{YIELD=1, SLEEP=2, WAIT=3, POST=4};
+uint16_t global_SizeOfQueue = 0;
 // function pointer
 typedef void (*_fn)();
 
 // semaphore
 #define MAX_SEMAPHORES 5
 #define MAX_QUEUE_SIZE 5
+
 typedef struct _semaphore
 {
     uint16_t count;
@@ -142,6 +145,7 @@ struct _tcb
     uint32_t srd;                  // MPU subregion disable bits
     char name[16];                 // name of task used in ps command
     void *semaphore;               // pointer to the semaphore that is blocking the thread
+
 } tcb[MAX_TASKS];
 
 //-----------------------------------------------------------------------------
@@ -161,7 +165,7 @@ void initRtos()
         tcb[i].pid = 0;
     }
 
-
+    sysTickConfig(ONE_KHZ_CLK);
 }
 
 // REQUIRED: Implement prioritization to 8 levels
@@ -277,7 +281,7 @@ void startRtos()
 void yield()
 {
 
-    __asm(" SVC #1"); //# number 20 is random for now
+    __asm(" SVC #1");
 }
 
 // REQUIRED: modify this function to support 1ms system timer
@@ -296,14 +300,13 @@ void wait(int8_t semaphore)
 // REQUIRED: modify this function to signal a semaphore is available using pendsv
 void post(int8_t semaphore)
 {
+    __asm(" SVC #4");
 }
 
 // REQUIRED: modify this function to add support for the system timer
 // REQUIRED: in preemptive code, add code to request task switch
 void systickIsr()
 {
-    putsUart0("systick\r\n");
-
     volatile uint8_t i = 0;
     for(i; i < taskCount; i++)
     {
@@ -316,7 +319,7 @@ void systickIsr()
             }
             else
             {
-                tcb[i].ticks-=1;
+                tcb[i].ticks--;
             }
         }
     }
@@ -385,11 +388,10 @@ void pendSvIsr()
         setPSP((uint32_t *)tcb[taskCurrent].spInit);
 
         //push values of xpsr-r0
-        pushPSP((uint32_t)0x61000000);              //expsr 0x01000000 because THUMB bit should always be set according to docs
+        pushPSP((uint32_t)0x01000000);              //expsr 0x01000000 because THUMB bit should always be set according to docs
         pushPSP((uint32_t)tcb[taskCurrent].pid); //pc
         pushPSP((uint32_t)0xFFFFFFFD); //LR holds EXEC_RETURN value. check pg.111 of docs.
 
-        //forgot stack pointer push[x]
         //r12 -r0 holds random values
         pushPSP((uint32_t)0x0);
         //r3
@@ -425,13 +427,16 @@ void svCallIsr()
     uint8_t* svc_num = (uint8_t*)(*SVCnAddr);
     svc_num -=2;
 
+    uint32_t index = *sleep;
+
     switch(*svc_num)
     {
-        case YIELD: //yield
+        case YIELD:
             //setPendSV(); //this will set the bit to pending. will then cause a pendSV exception.
             NVIC_INT_CTRL_R |= (1 << 28);
             break;
-        case SLEEP: //sleep
+
+        case SLEEP:
             //record time
             tcb[taskCurrent].ticks = *sleep;
             //set state to delay
@@ -439,12 +444,57 @@ void svCallIsr()
             //set pendSV
             NVIC_INT_CTRL_R |= (1 << 28);
             break;
+
+        case WAIT: //reminder index variable is a reference to the semaphore, it may be key_pressed, key_release, resource, etc...
+            if(semaphores[index].count > 0)
+            {
+                semaphores[index].count--;
+            }
+            else
+            {
+                uint16_t queueCount = semaphores[index].queueSize++;
+                //add process to semaphore i queue, increment queue count
+                semaphores[index].processQueue[queueCount] = taskCurrent;
+
+                //record semaphore i in tcb.
+                tcb[taskCurrent].semaphore = (void *)(semaphores + index);
+                //set state to blocked
+                tcb[taskCurrent].state = STATE_BLOCKED;
+                //set pendSV
+                NVIC_INT_CTRL_R |= (1 << 28);
+            }
+            break;
+
+        case POST:
+            //increment semaphore count
+            semaphores[index].count++;
+            //if it was zero and is now one, then someone has been waiting.
+            if(semaphores[index].count == 1)
+            {
+                if(semaphores[index].queueSize > 0)
+                {
+                    //make next task in list to ready state
+                    tcb[semaphores[index].processQueue[0]].state = STATE_READY;
+                    semaphores[index].count--;
+
+                    //shift queue for next available task = deleting from queue
+                    uint8_t i = 0;
+                    for(i = 0; i < semaphores[index].queueSize - 1; i++)
+                    {
+                        semaphores[index].processQueue[i] = semaphores[index].processQueue[i+1];
+                    }
+                    //decrement queque size and semaphore count
+                    semaphores[index].queueSize--;
+                }
+            }
+            break;
     }
 }
 
 // REQUIRED: code this function
 void mpuFaultIsr()
 {
+
 }
 
 // REQUIRED: code this function
@@ -509,7 +559,7 @@ void initHw()
     //initialize clock
     initSystemClockTo40Mhz();
     //init systick
-    sysTickConfig(ONE_KHZ_CLK);
+    //sysTickConfig(ONE_KHZ_CLK);
 
     //enable ports to use
     enablePort(PORTF); //for LED's and comparator output at PF0
@@ -789,9 +839,94 @@ void important()
 
 // REQUIRED: add processing for the shell commands through the UART here
 void shell()
+
 {
-    while (true)
+    USER_DATA data; //instantiate data from user
+    while(1)
     {
+        getsUart0(&data); //get data from  tty interface
+        putsUart0("\r\n");
+        putcUart0('>');
+
+        // Parse fields
+        parseFields(&data); //parse input data
+
+        if(isCommand(&data, "reboot", 0))
+        {
+            reboot();
+
+        }
+
+        else if(isCommand(&data, "ps", 0))
+        {
+            sys_ps();
+        }
+
+        else if(isCommand(&data, "ipcs", 0))
+        {
+            sys_ipcs();
+        }
+
+        else if(isCommand(&data, "kill", 1))
+        {
+            char * pid = getFieldString (&data, 1);
+            sys_kill(pid);
+        }
+
+        else if(isCommand(&data, "pi", 1))
+        {
+            //priority on or off
+            char * pid = getFieldString (&data, 1);
+
+            if(str_cmp(pid, "off") == 0) { sys_pi(0); }
+            else if(str_cmp(pid, "on") == 0) { sys_pi(1); }
+
+        }
+
+        else if(isCommand(&data, "preempt", 1))
+        {
+            //preempt on or off
+
+            char * pid = getFieldString (&data, 1);
+
+             if( str_cmp(pid, "off") == 0) { sys_preempt(0); }
+             else if( str_cmp(pid, "on") == 0) { sys_preempt(1); }
+
+        }
+
+        else if(isCommand(&data, "sched", 1))
+        {
+             //select priority or round robbin
+
+            char * pid = getFieldString (&data, 1);
+            if( str_cmp(pid, "prio") == 0){ sys_sched(0); }
+            else if( str_cmp(pid, "rr") == 0 ){ sys_sched(1); }
+        }
+
+        else if(isCommand(&data, "pidof", 1))
+        {
+            char * pid = getFieldString (&data, 1);
+            sys_pidof(pid);
+        }
+
+        else
+        {
+            //get second arg to see if its an argument
+            uint8_t args = data.fieldCount-1;
+
+            if(args == 1)
+            {
+                char * pid = getFieldString (&data, 1);
+                char * name = getFieldString (&data, 0);
+                if(*pid == '&')
+                {
+                    //run program at argument string 0
+                    sys_select(); //for now it will turn on RED
+                }
+            }
+        }
+
+        yield();
     }
 }
 
@@ -826,10 +961,7 @@ int main(void)
 
     // Add required idle process at lowest priority
     ok =  createThread(idle, "Idle", 7, 1024);
-    ok &= createThread(flash4Hz, "Flash4Hz", 4, 1024);
-    ok &= createThread(oneshot, "OneShot", 2, 1024);
 
-    /* Add other processes
     ok &= createThread(lengthyFn, "LengthyFn", 6, 1024);
     ok &= createThread(flash4Hz, "Flash4Hz", 4, 1024);
     ok &= createThread(oneshot, "OneShot", 2, 1024);
@@ -838,8 +970,9 @@ int main(void)
     ok &= createThread(important, "Important", 0, 1024);
     ok &= createThread(uncooperative, "Uncoop", 6, 1024);
     ok &= createThread(errant, "Errant", 6, 1024);
-    ok &= createThread(shell, "Shell", 6, 1024);
-    */
+    ok &= createThread(shell, "Shell", 6, 2048);
+
+
 
     //enable faults for debugging
     mpu_memfault_enable();

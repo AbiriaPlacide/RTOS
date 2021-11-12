@@ -169,21 +169,18 @@ step 6)a coding pendSVIsr (written on assembly)
 	At this point we should be able to run idle/lengthy/Flash4Hz
 
 
-	step 9 wait (idle/lengthy/flash4hz/oneshot
+step 9 wait (idle/lengthy/flash4hz/oneshot
 	---------------------------------------------------------------------------------------------------
 
 	wait(semaphore index)
 	{
-		svc #____
-
+		svc #___
 	}
 
 	in SVCISR()
 		add new case 
-
 		case wait:
 			i = get index from R0
-
 			if semaphore i count > 0: (means that its available)
 				count--
 			else
@@ -192,7 +189,7 @@ step 6)a coding pendSVIsr (written on assembly)
 				set state <- locked
 				set pendSV
 			break
-step 9) Post
+step 10) Post
 
 
 Post(semaphore index)
@@ -206,13 +203,13 @@ svcIsr
 		look into queue
 			if(queue.size > 0)
 			{
-				make next task in list ready
+				make next task in list ready, shift queue
 				delete task from queue, count--
 					decrement semaphore count
 					decrement queue.size
 			}
 
-step 10) Priority scheduler: what do you run next
+step 11) Priority scheduler: what do you run next?
 
 0 is highest <-> 7 is lowest
 there is a next pointer/index(0-11) in the tcb for each priority
@@ -224,3 +221,43 @@ there is a next pointer/index(0-11) in the tcb for each priority
 	if(lookover == 12) i++
 3) if found, exit loop, leave all next_index[i] as is
 	**next index is a **global variable
+
+step 12) shell command remember to add yield to getcUart0()
+	shell uses svc calls
+	example: sched RR/PRIO -> setSchedmode(rr/prio)	                in SVC ISR, set/clear scheduler mode
+									SVC #__
+			 preempt on/off ->     fn(    )							in svc isr, enable/disable preempt mode
+			 Reboot         ->     fn(    )
+			 						  SVC #___						in svc isr, reboot
+			 							svc #
+			 pidof			->	    setPid(uint32_t *pid, char svcName[])	return pid
+			 							svc#____
+			 kill pid		-> 	  	killpid(pid)							call destroyThread( )
+			 							svc #___								 remove from semaphores
+			 																	 mark as suspended
+			run process_name or process_name&
+				resumes/restarts a tasrk
+					restartTask(process name) -> find name in task, set sp <= spInit, mark as unrun
+							svc#___
+			ipcs -> getIpcsData(struct data[], &count) -> os fills in  struct array & count(number of semaphores in table)
+				svc #____
+
+				output table
+				semaphore now | cout | whos waiting
+
+			ps  ->  getpsData(semaphore data[], &count) -> os fills in struct array
+						svc#___
+
+				output table
+				pid | name | % cpu time | STATE
+
+
+				strategy on how to calculate % cpu time
+
+					in pendsv, before sched call, record stop time. time t = stoptime-startTime, call sched, record 
+step 13)
+	in systick isr()
+				-> global variable for preemption
+		if (preemption is on) pendsv bit = 1
+
+step 14) turn on mpu

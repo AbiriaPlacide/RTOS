@@ -32,7 +32,9 @@ void sysTickCtrl()
 
 void sysTickConfig(uint32_t freq)
 {
-    sysTickCtrl();
+;
     sysTickLoadValue(freq);
+    sysTickClear(21);
+    sysTickCtrl();
 
 }

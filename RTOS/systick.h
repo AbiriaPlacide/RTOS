@@ -18,7 +18,7 @@
  * * when the processor is halted for debugging the counter does not decrement
  */
 
-#define ONE_KHZ_CLK 39999
+#define ONE_KHZ_CLK (40000-1)
 
 
 void sysTickLoadValue(uint32_t value);
