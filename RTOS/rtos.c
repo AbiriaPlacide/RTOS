@@ -77,7 +77,7 @@
 // RTOS Defines and Kernel Variables
 //-----------------------------------------------------------------------------
 
-//added head pointer
+//added heap pointer
 
 uint32_t * heap = (uint32_t *)(0x20001800); //6KiB for OS
 
@@ -134,6 +134,7 @@ uint8_t taskCount = 0;     // total number of valid tasks
 // REQUIRED: add store and management for the memory used by the thread stacks
 //           thread stacks must start on 1 kiB boundaries so mpu can work correctly
 
+
 struct _tcb
 {
     uint8_t state;                 // see STATE_ values above
@@ -152,6 +153,8 @@ struct _tcb
 // RTOS Kernel Functions
 //-----------------------------------------------------------------------------
 
+//enable preemption
+bool preemption = false;
 // REQUIRED: initialize systick for 1ms system timer
 void initRtos()
 {
@@ -182,6 +185,48 @@ int rtosScheduler()
         ok = (tcb[task].state == STATE_READY || tcb[task].state == STATE_UNRUN);
     }
     return task;
+}
+
+
+//Priority scheduler variables
+uint8_t prioIndexBylevel[8] = {0};
+bool global_roundRobinScheduler = false; //if false use, priority scheduler
+uint8_t prio_level = 0; //keep track of current level when returning from task, so every task gets a turn
+
+int priorityScheduler()
+{
+
+    bool found = false;
+    uint8_t index = prioIndexBylevel[prio_level];
+
+    while(!found)
+    {
+        if(tcb[index].priority == prio_level)
+        {
+            if(tcb[index].state == STATE_UNRUN || tcb[index].state == STATE_READY)
+            {
+                found = true;
+                prioIndexBylevel[prio_level] = index+1; //store next index at that level
+                break;
+            }
+        }
+
+        index++;
+
+        if(index == MAX_TASKS)
+        {
+            prioIndexBylevel[prio_level] = 0; //start index over in current level
+            index = 0;
+            prio_level++;
+        }
+
+        if(prio_level > 7)
+        {
+            prio_level = 0;
+        }
+    }
+
+    return index;
 }
 
 bool createThread(_fn fn, const char name[], uint8_t priority, uint32_t stackBytes)
@@ -265,8 +310,16 @@ bool createSemaphore(uint8_t semaphore, uint8_t count)
 void startRtos()
 {//reminder: local static variable(will not change after changing stack pointer)
 
-    //global variable
-    taskCurrent = (uint8_t)rtosScheduler(); //returns available task to run, also task
+    if(global_roundRobinScheduler)
+    {
+        taskCurrent = (uint8_t)rtosScheduler();
+    }
+
+    else
+    {
+        taskCurrent = (uint8_t)priorityScheduler();
+    }
+
     uint32_t * pspPointer = tcb[taskCurrent].sp;
     setPSP(pspPointer); //set sp to the process stack pointer
     setPrivilege(); //removes Privileges
@@ -308,6 +361,7 @@ void post(int8_t semaphore)
 void systickIsr()
 {
     volatile uint8_t i = 0;
+
     for(i; i < taskCount; i++)
     {
         if(tcb[i].state == STATE_DELAYED)
@@ -323,6 +377,13 @@ void systickIsr()
             }
         }
     }
+
+    if(preemption)
+    {
+        //set pendSV, every task only gets 1ms to run, if its not done just task switch
+        NVIC_INT_CTRL_R |= (1 << 28);
+    }
+
 }
 
 // REQUIRED: in coop and preemptive, modify this function to add support for task switching
@@ -367,7 +428,16 @@ void pendSvIsr()
     //save current psp
     tcb[taskCurrent].sp = (void *)getPSP();
 
-    taskCurrent = (uint8_t)rtosScheduler(); // run scheduler for new task to fun
+    if(global_roundRobinScheduler)
+    {
+        taskCurrent = (uint8_t)rtosScheduler(); // run scheduler for new task to fun
+    }
+
+    else
+    {
+        taskCurrent = (uint8_t)priorityScheduler(); // run scheduler for new task to run
+    }
+
 
     if(tcb[taskCurrent].state == STATE_READY)
     {
@@ -382,7 +452,7 @@ void pendSvIsr()
 #endif
     }
 
-    else //unrun
+    else //unrun task
     {
         //change psp to new task
         setPSP((uint32_t *)tcb[taskCurrent].spInit);
@@ -665,11 +735,6 @@ void strcpyChar(char * dest, const char * src)
     dest[i] = '\0';
 }
 
-void setPendSV()
-{
-
-}
-
 // ------------------------------------------------------------------------------
 //  Task functions
 // ------------------------------------------------------------------------------
@@ -686,18 +751,6 @@ void idle()
         yield();
     }
 }
-
-void idle2()
-{
-    while(true)
-    {
-        BLUE_LED = 1;
-        waitMicrosecond(1000);
-        ORANGE_LED = 0;
-        yield();
-    }
-}
-
 
 void flash4Hz()
 {
@@ -925,8 +978,6 @@ void shell()
                 }
             }
         }
-
-        yield();
     }
 }
 
@@ -961,7 +1012,6 @@ int main(void)
 
     // Add required idle process at lowest priority
     ok =  createThread(idle, "Idle", 7, 1024);
-
     ok &= createThread(lengthyFn, "LengthyFn", 6, 1024);
     ok &= createThread(flash4Hz, "Flash4Hz", 4, 1024);
     ok &= createThread(oneshot, "OneShot", 2, 1024);
@@ -971,7 +1021,6 @@ int main(void)
     ok &= createThread(uncooperative, "Uncoop", 6, 1024);
     ok &= createThread(errant, "Errant", 6, 1024);
     ok &= createThread(shell, "Shell", 6, 2048);
-
 
 
     //enable faults for debugging

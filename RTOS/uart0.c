@@ -91,7 +91,7 @@ char getcUart0(void)
 {
     while (UART0_FR_R & UART_FR_RXFE)               // wait if uart0 rx fifo empty
     {
-        yield();
+        yield(); //yield to kernel when fifo empty
     }
     return UART0_DR_R & 0xFF;                        // get character from fifo
 }

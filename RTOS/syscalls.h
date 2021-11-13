@@ -49,7 +49,6 @@ void sys_pidof(char pid[]);      //Displays the PID of the process (thread).
 void sys_select();               //Runs the selected program in the background
 void reboot();                   //reboots whole system
 
-#define EXEC_RETURN
 //******************* mpu function definitions
 
 //void mpu_ctrlReg(uint8_t mask);

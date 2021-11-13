@@ -106,7 +106,6 @@ void getsUart0(USER_DATA * data)
             data->buffer[count] = c;
             count++;
         }
-        yield();
     }
 
 }
@@ -210,7 +209,7 @@ void parseFields(USER_DATA *data)
             data->fieldCount +=1;
         }
     }
-    uint8_t index = 0;
+    volatile uint8_t index = 0;
     for(index; data->buffer[index] != '\0'; index++)
 
     {
