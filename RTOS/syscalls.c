@@ -10,9 +10,7 @@
 
 void reboot()
 {
-    selectPinPushPullOutput(GREEN_LED);
-    setPinValue(GREEN_LED,1);
-    NVIC_APINT_R = (0x05FA0000 | NVIC_APINT_SYSRESETREQ);
+    __asm(" SVC #7");
 }
 void sys_ps()
 {
@@ -47,27 +45,23 @@ void sys_preempt(_Bool on_off)
 {
     //Turns preemption on or off.
 
-    if(on_off)
-    {
-        putsUart0("Preempt on\r\n");
-    }
+//    if(on_off)
+//    {
+//        putsUart0("Preempt on\r\n");
+//        __asm(" SVC #6");
+//    }
+//
+//    else if(!on_off)
+//    {
+//        putsUart0("Preempt off\r\n");
+//        __asm(" SVC #6");
+//    }
 
-    else if(!on_off)
-    {
-        putsUart0("Preempt off\r\n");
-    }
+    __asm(" SVC #6");
 }
 void sys_sched (_Bool prio_on)
 {
-    if(prio_on)
-    {
-        putsUart0("sched rr\r\n");
-    }
-
-    else
-    {
-        putsUart0("sched prio\r\n");
-    }
+    __asm(" SVC #5");
 }
 void sys_pidof(char name[])
 {

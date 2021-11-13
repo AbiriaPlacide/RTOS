@@ -98,7 +98,7 @@ extern uint32_t * getR0PSP();
 extern uint32_t * getProgramCounter();
 
 //custom globals
-enum services{YIELD=1, SLEEP=2, WAIT=3, POST=4};
+enum services{YIELD=1, SLEEP=2, WAIT=3, POST=4, SCHED=5,PREEMPT=6,REBOOT=7,PIDOF=8,KILLPID=9};
 uint16_t global_SizeOfQueue = 0;
 // function pointer
 typedef void (*_fn)();
@@ -190,7 +190,7 @@ int rtosScheduler()
 
 //Priority scheduler variables
 uint8_t prioIndexBylevel[8] = {0};
-bool global_roundRobinScheduler = false; //if false use, priority scheduler
+bool global_roundRobinScheduler = true; //if false use, priority scheduler
 uint8_t prio_level = 0; //keep track of current level when returning from task, so every task gets a turn
 
 int priorityScheduler()
@@ -492,6 +492,8 @@ void svCallIsr()
     //get sleep value
     uint32_t *sleep = getR0PSP();
 
+    uint32_t * sched_RR_PRIO;
+    uint32_t * preempt_value;
     //extract svc number from psp stack
     uint32_t *SVCnAddr = getProgramCounter(); //*svcnAddr holds address to pc after SVC call
     uint8_t* svc_num = (uint8_t*)(*SVCnAddr);
@@ -558,6 +560,43 @@ void svCallIsr()
                 }
             }
             break;
+        case SCHED: //round robin or priority sched
+            sched_RR_PRIO = getR0PSP();
+            if(*sched_RR_PRIO)
+            {
+                putsUart0("sched rr on\r\n");
+                global_roundRobinScheduler = true;
+            }
+            else
+            {
+                putsUart0("sched prio on\r\n");
+                global_roundRobinScheduler = false;
+            }
+
+            break;
+        case PREEMPT: //turn on preemption
+            preempt_value = getR0PSP();
+            if(*preempt_value)
+            {
+                putsUart0("preemption on\r\n");
+                preemption = true;
+            }
+            else
+            {
+                putsUart0("preemption off\r\n");
+                preemption = false;
+            }
+            break;
+        case REBOOT: //reboot device
+            GREEN_LED = 1;
+            NVIC_APINT_R = (0x05FA0000 | NVIC_APINT_SYSRESETREQ);
+            break;
+        case PIDOF: //process id of
+            break;
+        case KILLPID: //kill process id,
+            break;
+
+
     }
 }
 
@@ -986,7 +1025,7 @@ void shell()
 
         else if(isCommand(&data, "pi", 1))
         {
-            //priority on or off
+            //priority inheritance on or off
             char * pid = getFieldString (&data, 1);
 
             if(str_cmp(pid, "off") == 0) { sys_pi(0); }
