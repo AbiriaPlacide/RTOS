@@ -52,6 +52,7 @@ extern void svCallIsr();
 extern void hardFaultIsr();
 extern void busFaultIsr();
 extern void systickIsr();
+extern void mpuFaultIsr();
 //*****************************REGISTER DEFINITIONS
 //memory management mpu stuff
 #define FAULTSTAT_REG       0xE000ED28U //contains MFAULTSTAT, BFAULTSTAT, UFAULTSTAT
@@ -77,7 +78,8 @@ extern void systickIsr();
 uint8_t pid = 1;
 
 //static void HardFaultISR(uint32_t pid){};
-static void MPUFaultISR()
+/*
+static void MPUFaultISRx()
 {
     putsUart0("MPU Fault in process ");
     putcUart0( (pid+'0') );
@@ -91,11 +93,10 @@ static void MPUFaultISR()
 
     //access mem fault register. byte access, instead of word access. (note to self: change this to uint32_t if it does not work with byte access.)
 
-    volatile uint8_t * ptr_memfault = (uint8_t *)(FAULTSTAT_REG); //page.177 for memfault register
+    volatile uint8_t * ptr_memfault = (uint8_t *)(NVIC_FAULT_STAT_R); //page.177 for memfault register
 
     putsUart0("MemFault(pg.177): ");
     printHex(*ptr_memfault);
-
 
     putsUart0("R0: ");
     printHex(*psp_pointer);
@@ -121,8 +122,8 @@ static void MPUFaultISR()
     putsUart0("xPSR: ");
     printHex(*(psp_pointer+7));
 
-    volatile uint32_t * MemMgmntFaultAddr = (uint32_t *)(MEM_MGNT_REG); //pg 177.
-    volatile uint32_t * BusFaultAddr = (uint32_t * )(BUS_FAULT_REG);
+    volatile uint32_t * MemMgmntFaultAddr = (uint32_t *)(NVIC_MM_ADDR_R); //pg 177.
+    volatile uint32_t * BusFaultAddr = (uint32_t * )(NVIC_FAULT_ADDR_R);
 
     putsUart0("\r\nData Address: ");
     printHex(*MemMgmntFaultAddr); //print true faulting data adddress
@@ -133,15 +134,15 @@ static void MPUFaultISR()
     //clear mpu fault pending bit and trigger a pendsv isr
 
     //clear mpu fault pending bit
-    volatile uint32_t * ptr_MPUCLEAR = (uint32_t * )(SYS_HANDLER_CTRL); //pg 172
-    *ptr_MPUCLEAR &= ~(MEM_MGNT_FAULT_CLEAR); //should clear MPU pending bits
+    volatile uint32_t * ptr_MPUCLEAR = (uint32_t * )(NVIC_SYS_HND_CTRL_R); //pg 172
+    *ptr_MPUCLEAR &= ~(1 << 13); //should clear MPU pending bits
 
     //trigger pendSV
-    volatile uint32_t *pend_sv_ptr = (uint32_t *)(INTCTRL_REG);
-    *pend_sv_ptr |= PENDSV; //this will set the bit to pending. will then cause a pendSV exception.
-
-
+    volatile uint32_t *pend_sv_ptr = (uint32_t *)(NVIC_INT_CTRL_R);
+    *pend_sv_ptr |= (1 << 28); //this will set the bit to pending. will then cause a pendSV exception.
 };
+
+*/
 
 static void
 IntDefaultHandler(void)
@@ -194,7 +195,7 @@ void (* const g_pfnVectors[])(void) =
     ResetISR,                               // The reset handler
     NmiSR,                                  // The NMI handler
     hardFaultIsr,                               // The hard fault handler
-    MPUFaultISR,                            // The MPU fault handler
+    mpuFaultIsr,                            // The MPU fault handler
     busFaultIsr,                             // The bus fault handler
     usageFaultIsr,                            // The usage fault handler
     0,                                      // Reserved

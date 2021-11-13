@@ -565,12 +565,70 @@ void svCallIsr()
 void mpuFaultIsr()
 {
 
+    putsUart0("MPU Fault in process ");
+    printHex( ((uint32_t) tcb[taskCurrent].pid+'0') );
+    putsUart0("\r\n");
+    uint32_t * psp_pointer = getPSP(); //points to top of stack === R0;
+    uint32_t * msp_pointer = getMSP();
+    putsUart0("PSP: ");
+    printHex(*psp_pointer);
+    putsUart0("MSP: ");
+    printHex(*msp_pointer);
+
+    //access mem fault register. byte access, instead of word access. (note to self: change this to uint32_t if it does not work with byte access.)
+
+    volatile uint8_t * ptr_memfault = (uint8_t *)(NVIC_FAULT_STAT_R); //page.177 for memfault register
+
+    putsUart0("MemFault(pg.177): ");
+    printHex(*ptr_memfault);
+
+    putsUart0("R0: ");
+    printHex(*psp_pointer);
+
+    putsUart0("R1: ");
+    printHex(*(psp_pointer+1));
+
+    putsUart0("R2: ");
+    printHex(*(psp_pointer+2));
+
+    putsUart0("R3: ");
+    printHex(*(psp_pointer+3));
+
+    putsUart0("R12: ");
+    printHex(*(psp_pointer+4));
+
+    putsUart0("LR: ");
+    printHex(*(psp_pointer+5));
+
+    putsUart0("PC: ");
+    printHex(*(psp_pointer+6));
+
+    putsUart0("xPSR: ");
+    printHex(*(psp_pointer+7));
+
+    volatile uint32_t * MemMgmntFaultAddr = (uint32_t *)(NVIC_MM_ADDR_R); //pg 177.
+    volatile uint32_t * BusFaultAddr = (uint32_t * )(NVIC_FAULT_ADDR_R);
+
+    putsUart0("\r\nData Address: ");
+    printHex(*MemMgmntFaultAddr); //print true faulting data adddress
+    putsUart0("Instruction Address: ");
+    printHex(*BusFaultAddr); //print true faulting instruction address
+    putsUart0("\r\n");
+
+    //clear mpu fault pending bit and trigger a pendsv isr
+
+    //clear mpu fault pending bit
+    volatile uint32_t * ptr_MPUCLEAR = (uint32_t * )(NVIC_SYS_HND_CTRL_R); //pg 172
+    *ptr_MPUCLEAR &= ~(1 << 13); //should clear MPU pending bits
+
+    //trigger pendSV
+    volatile uint32_t *pend_sv_ptr = (uint32_t *)(NVIC_INT_CTRL_R);
+    *pend_sv_ptr |= (1 << 28); //this will set the bit to pending. will then cause a pendSV exception.
 }
 
 // REQUIRED: code this function
 void hardFaultIsr()
 {
-
 /* provide the value of the PSP, MSP, and hard fault
     flags (in hex)     */
 

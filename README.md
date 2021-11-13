@@ -13,10 +13,10 @@
 	8) added support for sleep and systick timer/isr
 	9) added semaphore functionality for  wait
 	10) added semaphore functionality for post
-	11) add priority scheduler (in progress...)
+	11) added priority scheduler 
 4. Memory Protection Unit
-5. Interfaces: Push Buttons, Leds added
-6. Add shell interface over UART
+5. Interfaces: Push Buttons, Leds 
+6. Add shell interface over UART (in progress...)
 7. Add MPU for security, isolation between running processes
 
 
