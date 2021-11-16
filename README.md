@@ -14,9 +14,6 @@
 	9) added semaphore functionality for  wait
 	10) added semaphore functionality for post
 	11) added priority scheduler 
-4. Memory Protection Unit
-5. Interfaces: Push Buttons, Leds 
-6. Add shell interface over UART (in progress...)
-7. Add MPU for security, isolation between running processes
-
-
+	12) add kernal functions to get cpu time and priviledged information over utart (...in progress)
+	13) added preemption
+	14)Add mpu support
