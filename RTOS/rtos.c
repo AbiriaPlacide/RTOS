@@ -98,7 +98,7 @@ extern uint32_t * getR0PSP();
 extern uint32_t * getProgramCounter();
 
 //custom globals
-enum services{YIELD=1, SLEEP=2, WAIT=3, POST=4, SCHED=5,PREEMPT=6,REBOOT=7,PIDOF=8,KILLPID=9};
+enum services{YIELD=1, SLEEP=2, WAIT=3, POST=4, SCHED=5,PREEMPT=6,REBOOT=7,PIDOF=8,KILLPID=9,RESTART=10,IPCS=11,PS=12};
 uint16_t global_SizeOfQueue = 0;
 // function pointer
 typedef void (*_fn)();
@@ -126,6 +126,7 @@ semaphore semaphores[MAX_SEMAPHORES];
 #define STATE_READY      2 // has run, can resume at any time
 #define STATE_DELAYED    3 // has run, but now awaiting timer
 #define STATE_BLOCKED    4 // has run, but now blocked by semaphore
+#define STATE_SUSPENDED     5
 
 #define MAX_TASKS 12       // maximum number of valid tasks
 uint8_t taskCurrent = 0;   // index of last dispatched task
@@ -154,7 +155,7 @@ struct _tcb
 //-----------------------------------------------------------------------------
 
 //enable preemption
-bool preemption = false;
+bool preemption = true;
 // REQUIRED: initialize systick for 1ms system timer
 void initRtos()
 {
@@ -167,8 +168,6 @@ void initRtos()
         tcb[i].state = STATE_INVALID;
         tcb[i].pid = 0;
     }
-
-    sysTickConfig(ONE_KHZ_CLK);
 }
 
 // REQUIRED: Implement prioritization to 8 levels
@@ -190,12 +189,12 @@ int rtosScheduler()
 
 //Priority scheduler variables
 uint8_t prioIndexBylevel[8] = {0};
-bool global_roundRobinScheduler = true; //if false use, priority scheduler
+bool global_roundRobinScheduler = false; //if false use, priority scheduler
 uint8_t prio_level = 0; //keep track of current level when returning from task, so every task gets a turn
 
 int priorityScheduler()
 {
-
+    //uint8_t prio_level = 0; //keep track of current level when returning from task, so every task gets a turn
     bool found = false;
     uint8_t index = prioIndexBylevel[prio_level];
 
@@ -213,7 +212,7 @@ int priorityScheduler()
 
         index++;
 
-        if(index == MAX_TASKS)
+        if(index == MAX_TASKS) //if at end of level, go to next level, reset index, store last index of level
         {
             prioIndexBylevel[prio_level] = 0; //start index over in current level
             index = 0;
@@ -222,6 +221,7 @@ int priorityScheduler()
 
         if(prio_level > 7)
         {
+            index = 0;
             prio_level = 0;
         }
     }
@@ -280,6 +280,19 @@ bool createThread(_fn fn, const char name[], uint8_t priority, uint32_t stackByt
 // REQUIRED: modify this function to restart a thread
 void restartThread(_fn fn)
 {
+    uint8_t index;
+    for(index = 0; index < MAX_TASKS; index++)
+    {
+        if(tcb[index].pid == fn)
+        {
+            putsUart0(tcb[index].name);
+            putsUart0(" restarted\r\n");
+            tcb[index].sp = tcb[index].spInit;
+            tcb[index].state = STATE_UNRUN;
+            break;
+
+        }
+    }
 
 }
 
@@ -288,12 +301,42 @@ void restartThread(_fn fn)
 // NOTE: see notes in class for strategies on whether stack is freed or not
 void destroyThread(_fn fn)
 {
+    uint8_t index;
+    for(index = 0; index < MAX_TASKS; index++)
+    {
+        if( tcb[index].pid == fn) //&& tcb[index].state == STATE_BLOCKED)
+        {
+            //remove from semaphore only if blocked
 
+            if(tcb[index].state == STATE_BLOCKED) //found that not putting this condition crashes the RTOS
+            {
+                semaphore * spore = (semaphore *)tcb[index].semaphore;
+                uint8_t i;
+                for(i = 0; i < spore->queueSize-1; i++)
+                {
+                  if(spore->processQueue[i] == index)//index is where it was found to be == taskCurrent as well
+                  {
+                      spore->processQueue[i]= spore->processQueue[i+1];
+                      spore->queueSize--;
+                      spore->processQueue[i] = 0;
+                  }
+                  //decrement queque size and semaphore count
+                }
+            }
+
+            tcb[index].state = STATE_SUSPENDED;
+
+            putsUart0(tcb[index].name);
+            putsUart0(" destroyed \r\n");
+            break;
+        }
+    }
 }
 
 // REQUIRED: modify this function to set a thread priority
 void setThreadPriority(_fn fn, uint8_t priority)
 {
+
 }
 
 bool createSemaphore(uint8_t semaphore, uint8_t count)
@@ -322,8 +365,16 @@ void startRtos()
 
     uint32_t * pspPointer = tcb[taskCurrent].sp;
     setPSP(pspPointer); //set sp to the process stack pointer
-    setPrivilege(); //removes Privileges
 
+
+
+    //last step
+    //set asp bit
+    //set SRD() , also it has to be in pendSV(), srds have to be reset when switching tasks
+    //mpu on
+    //set tmpl bit
+    sysTickConfig(ONE_KHZ_CLK);
+    setPrivilege(); //removes Privileges
     tcb[taskCurrent].state = STATE_READY;
     _fn funcptr_run = (_fn)tcb[taskCurrent].pid; //pid = task being run
     //runs first task
@@ -333,7 +384,6 @@ void startRtos()
 // REQUIRED: modify this function to yield execution back to scheduler using pendsv
 void yield()
 {
-
     __asm(" SVC #1");
 }
 
@@ -369,7 +419,7 @@ void systickIsr()
             if(tcb[i].ticks == 0)
             {
                 tcb[i].state = STATE_READY;
-                return;
+                break;
             }
             else
             {
@@ -378,13 +428,17 @@ void systickIsr()
         }
     }
 
-    if(preemption)
-    {
-        //set pendSV, every task only gets 1ms to run, if its not done just task switch
-        NVIC_INT_CTRL_R |= (1 << 28);
-    }
+    if(preemption == true)
+   {
+      //set pendSV, every task only gets 1ms to run, if its not done just task switch
+      NVIC_INT_CTRL_R |= (1 << 28);
+   }
+
+
 
 }
+
+
 
 // REQUIRED: in coop and preemptive, modify this function to add support for task switching
 // REQUIRED: process UNRUN and READY tasks differently
@@ -405,7 +459,7 @@ void pendSvIsr()
 
 #ifdef DEBUG
     putsUart0("pendSV in process: ");
-    printHex((uint32_t)(tcb[taskCurrent].pid) );
+    printHexFromUint32((uint32_t)(tcb[taskCurrent].pid) );
     putsUart0("\r\n");
 #endif
     //save context
@@ -414,7 +468,7 @@ void pendSvIsr()
     putsUart0(tcb[taskCurrent].name);
     putsUart0("\r\n");
     putsUart0("pendSV PSP before push: ");
-    printHex((uint32_t)getPSP());
+    printHexFromUint32((uint32_t)getPSP());
 #endif
     //save context
     push_R4_to_R11();
@@ -422,7 +476,7 @@ void pendSvIsr()
 
 #ifdef DEBUG
     putsUart0("pendSV psp after push: ");
-    printHex((uint32_t)getPSP());
+    printHexFromUint32((uint32_t)getPSP());
 #endif
 
     //save current psp
@@ -438,7 +492,6 @@ void pendSvIsr()
         taskCurrent = (uint8_t)priorityScheduler(); // run scheduler for new task to run
     }
 
-
     if(tcb[taskCurrent].state == STATE_READY)
     {
         //restore psp
@@ -448,7 +501,7 @@ void pendSvIsr()
         //pop by hardware on exit of exception
 #ifdef DEBUG
     putsUart0("pendSV psp after pop: ");
-    printHex((uint32_t)getPSP());
+    printHexFromUint32((uint32_t)getPSP());
 #endif
     }
 
@@ -490,7 +543,7 @@ void svCallIsr()
 #endif
 
     //get sleep value
-    uint32_t *sleep = getR0PSP();
+    uint32_t *sleep = getPSP();
 
     uint32_t * sched_RR_PRIO;
     uint32_t * preempt_value;
@@ -561,7 +614,7 @@ void svCallIsr()
             }
             break;
         case SCHED: //round robin or priority sched
-            sched_RR_PRIO = getR0PSP();
+            sched_RR_PRIO = getPSP();
             if(*sched_RR_PRIO)
             {
                 putsUart0("sched rr on\r\n");
@@ -576,6 +629,7 @@ void svCallIsr()
             break;
         case PREEMPT: //turn on preemption
             preempt_value = getR0PSP();
+
             if(*preempt_value)
             {
                 putsUart0("preemption on\r\n");
@@ -592,9 +646,59 @@ void svCallIsr()
             NVIC_APINT_R = (0x05FA0000 | NVIC_APINT_SYSRESETREQ);
             break;
         case PIDOF: //process id of
+        {
+            volatile uint8_t index = 0;
+            char * pidname = (char *) *(getPSP()+1);//R1 regiser
+
+            for(index; index < MAX_TASKS; index++)
+            {
+                if (str_cmp(tcb[index].name,pidname) == 0)
+                {
+                    printHexFromUint32((uint32_t)tcb[index].pid);
+                    break;
+                }
+            }
+        }
             break;
-        case KILLPID: //kill process id,
+        case KILLPID: //kill process id
+        {
+
+            const char * pidname = (char *) *(getPSP());//R0 register
+            uint32_t pid = hexToUint32(pidname);
+
+            volatile uint8_t index = 0;
+            for(index; index < MAX_TASKS; index++)
+            {
+                if (tcb[index].pid ==(void *)pid)
+                {
+                    destroyThread((_fn)tcb[index].pid);
+                }
+            }
+        }
             break;
+
+        case RESTART:
+        {
+            volatile uint8_t index = 0;
+            char * pidname = (char *) *(getPSP()+1);//R0 regiser
+            for(index; index < MAX_TASKS; index++)
+            {
+                if (str_cmp(tcb[index].name,pidname) == 0 && tcb[index].state == STATE_SUSPENDED)
+                {
+                    restartThread((_fn)tcb[index].pid);
+                }
+            }
+
+            break;
+        }
+
+        case IPCS:
+
+            break;
+        case PS:
+
+            break;
+
 
 
     }
@@ -605,53 +709,53 @@ void mpuFaultIsr()
 {
 
     putsUart0("MPU Fault in process ");
-    printHex( ((uint32_t) tcb[taskCurrent].pid+'0') );
+    printHexFromUint32( ((uint32_t) tcb[taskCurrent].pid+'0') );
     putsUart0("\r\n");
     uint32_t * psp_pointer = getPSP(); //points to top of stack === R0;
     uint32_t * msp_pointer = getMSP();
     putsUart0("PSP: ");
-    printHex(*psp_pointer);
+    printHexFromUint32(*psp_pointer);
     putsUart0("MSP: ");
-    printHex(*msp_pointer);
+    printHexFromUint32(*msp_pointer);
 
     //access mem fault register. byte access, instead of word access. (note to self: change this to uint32_t if it does not work with byte access.)
 
     volatile uint8_t * ptr_memfault = (uint8_t *)(NVIC_FAULT_STAT_R); //page.177 for memfault register
 
     putsUart0("MemFault(pg.177): ");
-    printHex(*ptr_memfault);
+    printHexFromUint32(*ptr_memfault);
 
     putsUart0("R0: ");
-    printHex(*psp_pointer);
+    printHexFromUint32(*psp_pointer);
 
     putsUart0("R1: ");
-    printHex(*(psp_pointer+1));
+    printHexFromUint32(*(psp_pointer+1));
 
     putsUart0("R2: ");
-    printHex(*(psp_pointer+2));
+    printHexFromUint32(*(psp_pointer+2));
 
     putsUart0("R3: ");
-    printHex(*(psp_pointer+3));
+    printHexFromUint32(*(psp_pointer+3));
 
     putsUart0("R12: ");
-    printHex(*(psp_pointer+4));
+    printHexFromUint32(*(psp_pointer+4));
 
     putsUart0("LR: ");
-    printHex(*(psp_pointer+5));
+    printHexFromUint32(*(psp_pointer+5));
 
     putsUart0("PC: ");
-    printHex(*(psp_pointer+6));
+    printHexFromUint32(*(psp_pointer+6));
 
     putsUart0("xPSR: ");
-    printHex(*(psp_pointer+7));
+    printHexFromUint32(*(psp_pointer+7));
 
     volatile uint32_t * MemMgmntFaultAddr = (uint32_t *)(NVIC_MM_ADDR_R); //pg 177.
     volatile uint32_t * BusFaultAddr = (uint32_t * )(NVIC_FAULT_ADDR_R);
 
     putsUart0("\r\nData Address: ");
-    printHex(*MemMgmntFaultAddr); //print true faulting data adddress
+    printHexFromUint32(*MemMgmntFaultAddr); //print true faulting data adddress
     putsUart0("Instruction Address: ");
-    printHex(*BusFaultAddr); //print true faulting instruction address
+    printHexFromUint32(*BusFaultAddr); //print true faulting instruction address
     putsUart0("\r\n");
 
     //clear mpu fault pending bit and trigger a pendsv isr
@@ -669,19 +773,19 @@ void mpuFaultIsr()
 void hardFaultIsr()
 {
 /* provide the value of the PSP, MSP, and hard fault
-    flags (in hex)     */
+    flags (in hex) */
 
     putsUart0("Hard Fault in process ");
-    printHex( ((uint32_t) tcb[taskCurrent].pid+'0') );
+    printHexFromUint32( ((uint32_t) tcb[taskCurrent].pid+'0') );
     putsUart0("\r\n");
 
     putsUart0("PSP: ");
-    printHex((uint32_t)getPSP());
+    printHexFromUint32((uint32_t)getPSP());
     putsUart0("MSP: ");
-    printHex((uint32_t)getMSP());
+    printHexFromUint32((uint32_t)getMSP());
 
     putsUart0("HardFault Flags: ");
-    printHex(NVIC_HFAULT_STAT_R);     //page.183 for hardfault register
+    printHexFromUint32(NVIC_HFAULT_STAT_R);     //page.183 for hardfault register
 
     putsUart0("\r\n Stuck in HardFault loop \r\n");
     while(1)
@@ -693,7 +797,7 @@ void hardFaultIsr()
 void busFaultIsr()
 {
     putsUart0("Bus Fault in process: ");
-    printHex((uint32_t) (tcb[taskCurrent].pid) );
+    printHexFromUint32((uint32_t) (tcb[taskCurrent].pid) );
 }
 
 // REQUIRED: code this function
@@ -702,14 +806,14 @@ void usageFaultIsr()
 
     putsUart0(tcb[taskCurrent].name);
     putsUart0(" \r\nUsage Fault in process: ");
-    printHex((uint32_t) (tcb[taskCurrent].pid) );
+    printHexFromUint32((uint32_t) (tcb[taskCurrent].pid) );
     putsUart0("\n\r");
 
     uint16_t * usagefault = ((uint16_t *)(0xE000ED2A)); //Offset to usage fault reg
     putsUart0("fault flags: ");
-    printHex(*usagefault);
+    printHexFromUint32(*usagefault);
     putsUart0("\r\n fault psp: ");
-    printHex((uint32_t )getPSP());
+    printHexFromUint32((uint32_t )getPSP());
 
     while(1);
 }
@@ -747,7 +851,6 @@ void initHw()
     selectPinPushPullOutput(PORTE,0);
 
     //enable pullups for LEDS
-
     enablePinPullup(PORTF,2);
     enablePinPullup(PORTA,2);
     enablePinPullup(PORTA,3);
@@ -818,18 +921,6 @@ uint32_t calculateSRD(uint32_t StackSize)
 {
     StackSize = ((StackSize)/1024);
     return StackSize;
-}
-
-void strcpyChar(char * dest, const char * src)
-{
-    uint8_t i = 0;
-    while(src[i] != '\0')
-    {
-        dest[i] = src[i];
-        i++;
-    }
-
-    dest[i] = '\0';
 }
 
 // ------------------------------------------------------------------------------
@@ -999,12 +1090,11 @@ void shell()
         putcUart0('>');
 
         // Parse fields
-        parseFields(&data); //parse input data
+        parseFields(&data); //parse uart input data
 
         if(isCommand(&data, "reboot", 0))
         {
             reboot();
-
         }
 
         else if(isCommand(&data, "ps", 0))
@@ -1019,8 +1109,8 @@ void shell()
 
         else if(isCommand(&data, "kill", 1))
         {
-            char * pid = getFieldString (&data, 1);
-            sys_kill(pid);
+            char * pidname = getFieldString (&data, 1);
+            sys_kill(pidname);
         }
 
         else if(isCommand(&data, "pi", 1))
@@ -1055,26 +1145,33 @@ void shell()
 
         else if(isCommand(&data, "pidof", 1))
         {
-            char * pid = getFieldString (&data, 1);
-            sys_pidof(pid);
+            char * name = getFieldString (&data, 1);
+            uint32_t *pid = NULL;
+            sys_pidof(pid, name);
         }
 
-        else
+        else if(isCommand(&data, "run", 1))
         {
-            //get second arg to see if its an argument
-            uint8_t args = data.fieldCount-1;
-
-            if(args == 1)
-            {
-                char * pid = getFieldString (&data, 1);
-                char * name = getFieldString (&data, 0);
-                if(*pid == '&')
-                {
-                    //run program at argument string 0
-                    sys_select(); //for now it will turn on RED
-                }
-            }
+            char * name = getFieldString (&data, 1);
+            sys_select(name);
         }
+
+//        else
+//        {
+//            //get second arg to see if its an argument
+//            uint8_t args = data.fieldCount-1;
+//
+//            if(args == 1)
+//            {
+//                char * pid = getFieldString (&data, 1);
+//                char * name = getFieldString (&data, 0);
+//                if(*pid == '&')
+//                {
+//                    //run program at argument string 0
+//                    sys_select(name); //for now it will turn on RED
+//                }
+//            }
+//        }
     }
 }
 
@@ -1100,7 +1197,6 @@ int main(void)
     GREEN_LED = 0;
     waitMicrosecond(250000);
 
-
     // Initialize semaphores
     createSemaphore(keyPressed, 1);
     createSemaphore(keyReleased, 0);
@@ -1108,7 +1204,7 @@ int main(void)
     createSemaphore(resource, 1);
 
     // Add required idle process at lowest priority
-    ok =  createThread(idle, "Idle", 7, 1024);
+    ok =  createThread(idle, "Idle", 6, 1024);
     ok &= createThread(lengthyFn, "LengthyFn", 6, 1024);
     ok &= createThread(flash4Hz, "Flash4Hz", 4, 1024);
     ok &= createThread(oneshot, "OneShot", 2, 1024);

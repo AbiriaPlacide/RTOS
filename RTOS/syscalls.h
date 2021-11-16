@@ -45,8 +45,8 @@ void sys_kill(char * pid);       //Kills the process (thread) with the matching 
 void sys_pi(_Bool on_off);       //Turns priority inheritance on or off.
 void sys_preempt(_Bool on_off);  //Turns preemption on or off.
 void sys_sched (_Bool prio_on);  //Selected priority or round-robin scheduling.
-void sys_pidof(char pid[]);      //Displays the PID of the process (thread).
-void sys_select();               //Runs the selected program in the background
+void sys_pidof(uint32_t * pid,char name[]);      //Displays the PID of the process (thread).
+void sys_select(char name[]);               //Runs the selected program in the background
 void reboot();                   //reboots whole system
 
 //******************* mpu function definitions

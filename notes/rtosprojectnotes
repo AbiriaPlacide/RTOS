@@ -230,16 +230,17 @@ step 12) shell command remember to add yield to getcUart0()
 			 Reboot         ->     fn(    )
 			 						  SVC #___						in svc isr, reboot
 			 							svc #
-			 pidof			->	    setPid(uint32_t *pid, char svcName[])	return pid
+			 pidof			->	    getPid(uint32_t *pid, char svcName[])	return pid
 			 							svc#____
 			 kill pid		-> 	  	killpid(pid)							call destroyThread( )
 			 							svc #___								 remove from semaphores
-			 																	 mark as suspended
+			 																	 mark as suspended,
 			run process_name or process_name&
-				resumes/restarts a tasrk
+				resumes/restarts a task
 					restartTask(process name) -> find name in task, set sp <= spInit, mark as unrun
 							svc#___
-			ipcs -> getIpcsData(struct data[], &count) -> os fills in  struct array & count(number of semaphores in table)
+			ipcs -> getIpcsData(struct data[], &count) -> os fills in  struct array & count(number of semaphores in table). semaphore usage should be displaced.
+
 				svc #____
 
 				output table
@@ -260,4 +261,4 @@ step 13)
 				-> global variable for preemption
 		if (preemption is on) pendsv bit = 1
 
-step 14) turn on mpu
+step 14) turn on mpu 
