@@ -1,4 +1,4 @@
-#Real-time Operating Systems Course
+Real-time Operating Systems Course
 1. Shell Interface over UART
 2. Memory Protection Unit 
 3. RTOS Design
@@ -16,4 +16,3 @@
 	11) added priority scheduler 
 	12) add kernal functions to get cpu time and priviledged information over utart (...in progress)
 	13) added preemption
-	14)Add mpu support
