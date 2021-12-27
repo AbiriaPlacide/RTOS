@@ -1,5 +1,5 @@
 # Real-time Operating Systems Course
-### RTOS functionality is tested over a shell interface written kill/restart tasks, get pid of running tasks, set/unset preemption, and select scheduler.
+### RTOS functionality is tested over a shell interface which supports the commmands to kill/restart tasks, get pid of running tasks, set/unset preemption, and select scheduler.
 
 1. Shell Interface over UART
 2. Memory Protection Unit 
